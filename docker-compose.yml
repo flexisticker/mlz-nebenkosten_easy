@@ -1,0 +1,14 @@
+services:
+  vermieter-portal:
+    build: .
+    image: mlz-nebenkosten-easy
+    container_name: vermieter-portal
+    restart: unless-stopped
+    # Nur auf diesem Rechner erreichbar. Für Zugriff aus dem Heimnetz "127.0.0.1:" entfernen.
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      - TZ=Europe/Berlin
+    volumes:
+      # Alle Daten (Datenbank, Dokumente, Sicherungen) liegen im Ordner ./daten neben dieser Datei.
+      - ./daten:/data

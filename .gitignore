@@ -1,0 +1,10 @@
+# Persönliche Daten bleiben lokal und kommen nie auf GitHub
+daten/
+*.json
+!package.json
+*.pdf
+*.zip
+.env
+node_modules/
+.DS_Store
+Thumbs.db
