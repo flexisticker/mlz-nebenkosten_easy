@@ -57,9 +57,9 @@ function normalisiere(d) {
     beginn: d.mieter.seit || '', raeume: '2 Zimmer, Küche, Bad, Flur', etage: '', keller: 'Kellerabteil', stellplatz: '',
     gemeinschaft: 'Waschküche, Trockenraum und Garten zur Mitbenutzung', heizung: 'Zentralheizung mit Warmwasserbereitung',
     schluessel: '2 Haus- und Wohnungsschlüssel, 1 Briefkastenschlüssel, 1 Kellerschlüssel', kaution: '', personen: '1',
-    kleinreparaturen: true, energieausweis: true, sonstiges: '', ort: '', datum: '', ...d.vertrag,
+    kleinreparaturen: true, energieausweis: true, ersetzt: false, alterVertrag: '', gueltigAb: '', kautionGeleistet: true, sonstiges: '', ort: '', datum: '', ...d.vertrag,
   };
-  d.brief = { art: 'miete', datum: '', neuKalt: '', kappung: 20, begruendungArt: 'vergleich', begruendung: '', neuNk: '', abNk: '', betreff: '', text: '', ...d.brief };
+  d.brief = { art: 'miete', datum: '', neuKalt: '', kappung: 20, begruendungArt: 'vergleich', begruendung: '', neuNk: '', abNk: '', abKalt: '', betreff: '', text: '', ...d.brief };
   d.verlauf = Array.isArray(d.verlauf) ? d.verlauf : [];
   return d;
 }
@@ -383,6 +383,7 @@ async function dokListe() {
 // ---------- Mietvertrag ----------
 TABS.vertrag = {
   render() {
+    const t = D.vertrag;
     return `
       <div class="card"><h2>Mietvertrag</h2>
         <p class="hint">Namen, Adressen und Miete kommen aus den Stammdaten. Hier ergänzt du die Angaben zur Wohnung. Die Vorlage ist ein Muster ohne Gewähr und ersetzt keine Rechtsberatung. Lass sie vor der ersten Verwendung z. B. von Haus &amp; Grund prüfen.</p>
@@ -396,6 +397,11 @@ TABS.vertrag = {
           ${feld('Anzahl Personen', 'vertrag.personen')}
           ${feld('Ort der Unterschrift', 'vertrag.ort', { platzhalter: ortOhnePlz(D.vermieter.ort) })}
           ${feld('Datum der Unterschrift', 'vertrag.datum', { typ: 'date' })}
+          ${feld('Dieser Vertrag ersetzt einen bestehenden Mietvertrag', 'vertrag.ersetzt', { typ: 'bool', breit: true, hinweis: 'Für Mieter, die schon in der Wohnung wohnen. Das Mietverhältnis läuft dann ohne Unterbrechung weiter.' })}
+          ${t.ersetzt ? `
+            ${feld('Datum des alten Mietvertrags', 'vertrag.alterVertrag', { typ: 'date' })}
+            ${feld('Neuer Vertrag gilt ab', 'vertrag.gueltigAb', { typ: 'date', hinweis: 'Leer = ab Unterschrift.' })}
+            ${feld('Kaution wurde schon gezahlt und bleibt bestehen', 'vertrag.kautionGeleistet', { typ: 'bool', breit: true })}` : ''}
           ${feld('Kleinreparaturklausel aufnehmen (bis 100 € je Fall, höchstens 8 % der Jahreskaltmiete)', 'vertrag.kleinreparaturen', { typ: 'bool', breit: true })}
           ${feld('Energieausweis wurde vorgelegt', 'vertrag.energieausweis', { typ: 'bool', breit: true })}
           ${feld('Sonstige Vereinbarungen', 'vertrag.sonstiges', { typ: 'textarea', breit: true })}
@@ -422,7 +428,9 @@ function vertragHtml() {
       ${t.gemeinschaft ? `<p>(${mitvermietet ? 3 : 2}) ${esc(t.gemeinschaft)}.</p>` : ''}
       <p>Die Wohnung gehört zu einer Wohnungseigentumsanlage. Die Hausordnung und die Beschlüsse der Eigentümergemeinschaft zum Gebrauch des gemeinschaftlichen Eigentums sind auch für den Mieter verbindlich, soweit sie ihm bekannt gegeben wurden.</p>
       <p>Die Wohnung wird von ${esc(t.personen || '1')} Person(en) bewohnt.</p>`)}
-    ${par('Mietzeit und Kündigung', `<p>(1) Das Mietverhältnis beginnt am ${datumDE(t.beginn || m.seit) || '__________'} und läuft auf unbestimmte Zeit.</p>
+    ${par('Mietzeit und Kündigung', `${t.ersetzt
+      ? `<p>(1) Das Mietverhältnis besteht seit dem ${datumDE(t.beginn || m.seit) || '__________'} und läuft auf unbestimmte Zeit. Dieser Vertrag gilt ab dem ${datumDE(t.gueltigAb || t.datum) || '__________'}.</p>`
+      : `<p>(1) Das Mietverhältnis beginnt am ${datumDE(t.beginn || m.seit) || '__________'} und läuft auf unbestimmte Zeit.</p>`}
       <p>(2) Die Kündigung richtet sich nach den gesetzlichen Vorschriften. Der Mieter kann mit einer Frist von drei Monaten kündigen. Für den Vermieter verlängert sich die Frist nach fünf und acht Jahren Mietdauer um jeweils drei Monate (§ 573c BGB). Die Kündigung muss schriftlich erfolgen (§ 568 BGB).</p>`)}
     ${par('Miete und Betriebskosten', `<table>
         <tr><td>Nettokaltmiete</td><td class="num">${euro(kalt)}</td></tr>
@@ -432,8 +440,10 @@ function vertragHtml() {
       <p>(3) Die Kosten werden so verteilt, wie sie in der Jahresabrechnung der Eigentümergemeinschaft auf die Wohnung entfallen (in der Regel nach Miteigentumsanteilen). Heiz- und Warmwasserkosten werden nach der Heizkostenverordnung überwiegend nach Verbrauch verteilt.</p>
       <p>(4) Über die Vorauszahlungen wird jährlich abgerechnet. Nach einer Abrechnung kann jede Partei die Vorauszahlung in Textform auf eine angemessene Höhe anpassen (§ 560 Abs. 4 BGB).</p>`)}
     ${par('Zahlung', `<p>Die Miete ist monatlich im Voraus, spätestens am dritten Werktag des Monats, kostenfrei auf folgendes Konto zu zahlen: ${esc(v.bank)}${v.bank ? ', ' : ''}IBAN ${esc(v.iban) || '______________________'}, Kontoinhaber ${esc(v.name)}. Für die Rechtzeitigkeit kommt es auf die Erteilung des Zahlungsauftrags an.</p>`)}
-    ${par('Mietsicherheit (Kaution)', `<p>Der Mieter leistet eine Kaution von ${euro(kaution)}. Er darf sie in drei gleichen monatlichen Teilbeträgen zahlen; der erste Teilbetrag ist zu Beginn des Mietverhältnisses fällig. Der Vermieter legt die Kaution getrennt von seinem Vermögen bei einem Kreditinstitut zum üblichen Zinssatz für Spareinlagen mit dreimonatiger Kündigungsfrist an. Die Zinsen stehen dem Mieter zu (§ 551 BGB).</p>`)}
-    ${par('Zustand, Obhut und Mängel', `<p>(1) Der Mieter hat die Wohnung besichtigt und übernimmt sie im Zustand bei Übergabe. Der Zustand wird in einem Übergabeprotokoll festgehalten.</p>
+    ${par('Mietsicherheit (Kaution)', t.ersetzt && t.kautionGeleistet
+      ? `<p>Der Mieter hat bei Beginn des Mietverhältnisses eine Kaution von ${euro(kaution)} geleistet. Sie bleibt mit allen bisher angefallenen Zinsen als Sicherheit für dieses Mietverhältnis bestehen. Der Vermieter legt sie weiterhin getrennt von seinem Vermögen bei einem Kreditinstitut zum üblichen Zinssatz für Spareinlagen an (§ 551 BGB).</p>`
+      : `<p>Der Mieter leistet eine Kaution von ${euro(kaution)}. Er darf sie in drei gleichen monatlichen Teilbeträgen zahlen; der erste Teilbetrag ist zu Beginn des Mietverhältnisses fällig. Der Vermieter legt die Kaution getrennt von seinem Vermögen bei einem Kreditinstitut zum üblichen Zinssatz für Spareinlagen mit dreimonatiger Kündigungsfrist an. Die Zinsen stehen dem Mieter zu (§ 551 BGB).</p>`)}
+    ${par('Zustand, Obhut und Mängel', `${t.ersetzt ? '<p>(1) Der Mieter bewohnt die Wohnung bereits und kennt ihren Zustand.</p>' : '<p>(1) Der Mieter hat die Wohnung besichtigt und übernimmt sie im Zustand bei Übergabe. Der Zustand wird in einem Übergabeprotokoll festgehalten.</p>'}
       <p>(2) Der Mieter behandelt die Wohnung pfleglich, lüftet und heizt ausreichend und zeigt Mängel unverzüglich an (§ 536c BGB).</p>
       ${t.heizung ? `<p>(3) Heizung und Warmwasser: ${esc(t.heizung)}.</p>` : ''}`)}
     ${t.kleinreparaturen ? par('Kleinreparaturen', `<p>Der Mieter trägt die Kosten kleiner Instandhaltungen an Teilen der Wohnung, die seinem häufigen Zugriff ausgesetzt sind (z. B. Installationsgegenstände für Wasser und Strom, Heiz- und Kocheinrichtungen, Fenster- und Türverschlüsse, Verschlussvorrichtungen von Fensterläden), soweit die Kosten im Einzelfall 100 € nicht übersteigen. Im Jahr trägt er höchstens 8 % der Jahresnettokaltmiete. Eine Pflicht, die Reparatur selbst zu beauftragen, besteht nicht.</p>`) : ''}
@@ -443,6 +453,7 @@ function vertragHtml() {
     ${par('Schlüssel und Rückgabe', `<p>(1) Der Mieter erhält: ${esc(t.schluessel)}.</p>
       <p>(2) Bei Ende des Mietverhältnisses gibt der Mieter die Wohnung geräumt, besenrein und mit allen Schlüsseln zurück.</p>`)}
     ${t.sonstiges ? par('Sonstige Vereinbarungen', absaetze(t.sonstiges)) : ''}
+    ${t.ersetzt ? par('Ersetzung des bisherigen Mietvertrags', `<p>Dieser Vertrag ersetzt ab dem ${datumDE(t.gueltigAb || t.datum) || '__________'} den bisherigen Mietvertrag${t.alterVertrag ? ' vom ' + datumDE(t.alterVertrag) : ''} vollständig. Es handelt sich nicht um ein neues Mietverhältnis: Das bestehende Mietverhältnis wird ohne Unterbrechung fortgesetzt. Die bisherige Mietdauer seit dem ${datumDE(t.beginn || m.seit) || '__________'} zählt weiter, insbesondere für die Kündigungsfristen. Ansprüche aus der Zeit vor diesem Datum, etwa aus noch offenen Betriebskostenabrechnungen, bleiben unberührt.</p>`) : ''}
     ${par('Schlussbestimmungen', `<p>${t.energieausweis ? 'Der Energieausweis wurde dem Mieter vor Vertragsschluss vorgelegt. ' : ''}Änderungen und Ergänzungen dieses Vertrags sollen schriftlich erfolgen. Sollte eine Bestimmung unwirksam sein, bleibt der Vertrag im Übrigen wirksam; es gelten dann die gesetzlichen Vorschriften. Jede Partei erhält eine Ausfertigung.</p>`)}
     <p style="margin-top:8mm">${esc(t.ort || ortOhnePlz(v.ort))}, den ${datumDE(t.datum) || '______________'}</p>
     <div class="unterschriften"><div>Vermieter: ${esc(v.name)}</div><div>Mieter: ${esc(m.name)}</div></div>
@@ -475,7 +486,11 @@ function briefDaten() {
   const flaeche = zahl(m.flaeche);
   if (b.art === 'miete') {
     const alt = zahl(mi.kalt), neu = zahl(b.neuKalt) || alt;
-    const { ab, grund } = naechsteErhoehungAb(datum);
+    const { ab: fruehestens, grund } = naechsteErhoehungAb(datum);
+    const ab = b.abKalt || fruehestens;
+    const altNk = zahl(mi.nk);
+    const neuNk = b.neuNk === '' || b.neuNk == null ? altNk : zahl(b.neuNk);
+    const nkAnders = rund(neuNk) !== rund(altNk);
     const grenze = rund(kaltVor3Jahren() * (1 + zahl(b.kappung) / 100));
     const fristEnde = letzterImMonat(datum, 2);
     const proQm = x => flaeche ? ` (${zahlText(x / flaeche)} €/m²)` : '';
@@ -489,6 +504,8 @@ function briefDaten() {
     if (neu <= alt) warnungen.push('Die neue Kaltmiete ist nicht höher als die aktuelle.');
     if (neu > grenze) warnungen.push(`Die Kappungsgrenze von ${b.kappung} % wird überschritten. Höchstens ${euro(grenze)} sind möglich (Basis ${euro(kaltVor3Jahren())} vor drei Jahren).`);
     if (grund && grund.startsWith('Das Schreiben')) warnungen.push(grund);
+    if (ab < fruehestens) warnungen.push(`Der ${datumDE(ab)} ist zu früh. Bei Zugang am ${datumDE(datum)} gilt die Erhöhung frühestens ab dem ${datumDE(fruehestens)}.`);
+    else if (!ab.endsWith('-01')) warnungen.push('Die Erhöhung sollte am Monatsersten beginnen.');
     if (!b.begruendung.trim()) warnungen.push('Die Begründung fehlt. Ohne Begründung ist das Mieterhöhungsverlangen unwirksam.');
     const betreff = 'Mieterhöhungsverlangen nach § 558 BGB';
     const text = [
@@ -497,20 +514,23 @@ function briefDaten() {
       `Ich bitte Sie, einer Erhöhung der Nettokaltmiete auf ${euro(neu)} monatlich${proQm(neu)} mit Wirkung ab dem ${datumDE(ab)} zuzustimmen. Das ist eine Erhöhung um ${euro(neu - alt)} (${prozent(alt ? (neu - alt) / alt * 100 : 0)}).`,
       `${begruendungen[b.begruendungArt] || ''}\n${b.begruendung.trim()}`.trim(),
       `Die neue Miete übersteigt die ortsübliche Vergleichsmiete nicht. Die Kappungsgrenze von ${b.kappung} % innerhalb von drei Jahren ist eingehalten. Die Miete ist seit mindestens 15 Monaten unverändert.`,
-      `Die Vorauszahlung auf die Betriebskosten von ${euro(zahl(mi.nk))} bleibt gleich. Ab dem ${datumDE(ab)} beträgt Ihre monatliche Gesamtmiete damit ${euro(neu + zahl(mi.nk))}.`,
+      nkAnders
+        ? `Gleichzeitig passe ich die monatliche Vorauszahlung auf die Betriebskosten nach § 560 Abs. 4 BGB von ${euro(altNk)} auf ${euro(neuNk)} an, ebenfalls ab dem ${datumDE(ab)}. Für diese Anpassung ist Ihre Zustimmung nicht erforderlich. Ab dem ${datumDE(ab)} beträgt Ihre monatliche Gesamtmiete damit ${euro(neu + neuNk)} (Nettokaltmiete ${euro(neu)} und Vorauszahlung ${euro(neuNk)}).`
+        : `Die Vorauszahlung auf die Betriebskosten von ${euro(altNk)} bleibt gleich. Ab dem ${datumDE(ab)} beträgt Ihre monatliche Gesamtmiete damit ${euro(neu + altNk)}.`,
       `Bitte teilen Sie mir Ihre Zustimmung bis zum ${datumDE(fristEnde)} mit. Eine kurze schriftliche Bestätigung oder eine Antwort per E-Mail genügt. Bitte passen Sie danach Ihren Dauerauftrag an.`,
       `Mit freundlichen Grüßen\n${D.vermieter.name}`,
     ];
-    return { betreff, text, warnungen, ab, neu, alt, zustimmung: true, datum };
+    return { betreff, text, warnungen, ab, neu, alt, neuNk, altNk, nkAnders, fruehestens, zustimmung: true, datum };
   }
   if (b.art === 'voraus') {
     const jahre = Object.keys(D.jahre).sort();
     const y = jahre[jahre.length - 1], r = rechne(y);
     const altNk = zahl(mi.nk);
     const vorschlag = Math.ceil(r.kosten / 12 / 5) * 5;
-    const neuNk = zahl(b.neuNk) || vorschlag;
+    const neuNk = b.neuNk === '' || b.neuNk == null ? altNk : zahl(b.neuNk);
     const ab = b.abNk || ersterImMonat(datum, 1);
     const warnungen = [];
+    if (rund(neuNk) === rund(altNk)) warnungen.push(`Bitte die neue Vorauszahlung eintragen. Sie ist noch gleich wie bisher (${euro(altNk)}).`);
     if (neuNk > r.kosten / 12 * 1.1) warnungen.push(`Die neue Vorauszahlung liegt deutlich über den tatsächlichen Kosten (${euro(r.kosten / 12)} pro Monat im Jahr ${y}). Die Anpassung muss angemessen sein.`);
     const betreff = 'Anpassung der Betriebskostenvorauszahlung nach § 560 Abs. 4 BGB';
     const text = [
@@ -526,17 +546,25 @@ function briefDaten() {
   return { betreff: b.betreff || 'Mitteilung', text, warnungen: [], datum };
 }
 
+function nkVorschlagText() {
+  const jahre = Object.keys(D.jahre).sort();
+  const y = jahre[jahre.length - 1], r = rechne(y);
+  return `Zur Orientierung: Laut Abrechnung ${y} lagen die Kosten bei ${euro(r.kosten / 12)} pro Monat.`;
+}
+
 TABS.schreiben = {
   render() {
     const b = D.brief;
     const felder = {
       miete: `
         ${feld('Neue Kaltmiete pro Monat (€)', 'brief.neuKalt', { typ: 'geld', platzhalter: zahlText(D.miete.kalt) })}
+        ${feld('Erhöhung gilt ab', 'brief.abKalt', { typ: 'date', hinweis: `Leer = frühestmöglicher Termin (${datumDE(naechsteErhoehungAb(b.datum || heute()).ab)}).` })}
+        ${feld('Nebenkosten-Vorauszahlung ab dann (€)', 'brief.neuNk', { typ: 'geld', platzhalter: 'bleibt ' + zahlText(D.miete.nk), hinweis: 'Leer lassen, wenn die Vorauszahlung gleich bleibt.' })}
         ${feld('Kappungsgrenze', 'brief.kappung', { typ: 'select', wert: 'zahl', optionen: [[20, '20 % in 3 Jahren'], [15, '15 % (Gemeinde mit angespanntem Wohnungsmarkt)']], hinweis: 'In Baden-Württemberg gilt in bestimmten Gemeinden 15 %. Das steht in der Kappungsgrenzenverordnung.' })}
         ${feld('Begründung über', 'brief.begruendungArt', { typ: 'select', optionen: [['vergleich', 'drei Vergleichswohnungen'], ['mietspiegel', 'Mietspiegel'], ['gutachten', 'Sachverständigengutachten'], ['datenbank', 'Mietdatenbank']] })}
         ${feld('Begründung', 'brief.begruendung', { typ: 'textarea', breit: true, hoch: 110, hinweis: 'Bei Vergleichswohnungen: Adresse, Lage im Haus, Größe und Miete pro m² von drei Wohnungen. Beim Mietspiegel: Name, Stand und Einordnung der Wohnung.' })}`,
       voraus: `
-        ${feld('Neue Vorauszahlung pro Monat (€)', 'brief.neuNk', { typ: 'geld', platzhalter: 'Vorschlag aus der letzten Abrechnung' })}
+        ${feld('Neue Vorauszahlung pro Monat (€)', 'brief.neuNk', { typ: 'geld', platzhalter: zahlText(D.miete.nk), hinweis: nkVorschlagText() })}
         ${feld('Gilt ab', 'brief.abNk', { typ: 'date', hinweis: 'Leer = ab dem nächsten Monat.' })}`,
       frei: `
         ${feld('Betreff', 'brief.betreff', { breit: true })}
@@ -624,7 +652,7 @@ document.addEventListener('input', e => {
   setP(el.dataset.bind, wert);
   if (typ === 'bool' && el.closest('tr')) el.closest('tr').className = wert ? '' : 'off';
   speichern();
-  if (el.dataset.bind === 'brief.art') return zeige(tab);
+  if (el.dataset.bind === 'brief.art' || el.dataset.bind === 'vertrag.ersetzt') return zeige(tab);
   TABS[tab].update?.();
 });
 
@@ -707,9 +735,11 @@ const AKTIONEN = {
   },
   mieteUebernehmen() {
     const bd = briefDaten();
-    if (!confirm(`Hat die ${mieterBez()} zugestimmt? Dann wird die Kaltmiete ab ${datumDE(bd.ab)} auf ${euro(bd.neu)} gesetzt.`)) return;
+    if (!confirm(`Hat die ${mieterBez()} zugestimmt? Dann wird die Kaltmiete ab ${datumDE(bd.ab)} auf ${euro(bd.neu)} gesetzt${bd.nkAnders ? ` und die Vorauszahlung auf ${euro(bd.neuNk)}` : ''}.`)) return;
     D.verlauf.push({ datum: heute(), art: 'kaltmiete', ab: bd.ab, alt: bd.alt, neu: bd.neu, text: `Kaltmiete ab ${datumDE(bd.ab)}: ${euro(bd.alt)} → ${euro(bd.neu)}` });
-    D.miete.kalt = bd.neu; D.miete.letzteErhoehung = bd.ab; D.brief.neuKalt = '';
+    if (bd.nkAnders) D.verlauf.push({ datum: heute(), art: 'vorauszahlung', ab: bd.ab, alt: bd.altNk, neu: bd.neuNk, text: `Nebenkosten-Vorauszahlung ab ${datumDE(bd.ab)}: ${euro(bd.altNk)} → ${euro(bd.neuNk)}` });
+    D.miete.kalt = bd.neu; D.miete.letzteErhoehung = bd.ab; if (bd.nkAnders) D.miete.nk = bd.neuNk;
+    D.brief.neuKalt = ''; D.brief.abKalt = ''; D.brief.neuNk = '';
     speichern(); zeige('schreiben'); status('Neue Miete übernommen');
   },
   nkUebernehmen() {
