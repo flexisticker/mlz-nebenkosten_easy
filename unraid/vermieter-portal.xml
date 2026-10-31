@@ -8,6 +8,7 @@
   <Privileged>false</Privileged>
   <Overview>Vermieter-Portal: Nebenkostenabrechnung, Dokumentenablage, Mietvertrag und Mieterhöhung für private Vermieter. Alle Daten bleiben im Datenordner auf dem Server. Keine Anmeldung, daher nur im Heimnetz betreiben.</Overview>
   <Category>Productivity:</Category>
+  <Icon>https://raw.githubusercontent.com/flexisticker/mlz-nebenkosten_easy/main/public/icon-192.png</Icon>
   <WebUI>http://[IP]:[PORT:8080]/</WebUI>
   <Config Name="Web-Port" Target="8080" Default="8280" Mode="tcp" Description="Port im Heimnetz" Type="Port" Display="always" Required="true">8280</Config>
   <Config Name="Daten" Target="/data" Default="/mnt/user/appdata/vermieter-portal" Mode="rw" Description="Datenbank (portal.json), Dokumente und Sicherungen" Type="Path" Display="always" Required="true">/mnt/user/appdata/vermieter-portal</Config>

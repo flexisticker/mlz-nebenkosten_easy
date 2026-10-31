@@ -23,15 +23,21 @@ Packages → mlz-nebenkosten-easy → Package settings die Sichtbarkeit auf „P
 3. Im Heimnetz öffnen: `http://<IP des Servers>:8280`
 4. Beim ersten Start „Meine Datensicherung (.json) importieren“ wählen. PDFs danach unter **Dokumente** hochladen.
 
-## 3. Aktualisieren
+## 3. Icon nachträglich übernehmen
+
+Wer den Container schon vor dem Icon angelegt hat: Docker → `vermieter-portal` → Edit →
+oben rechts „Advanced View“ → bei **Icon URL** eintragen:
+`https://raw.githubusercontent.com/flexisticker/mlz-nebenkosten_easy/main/public/icon-192.png` → Apply.
+
+## 4. Aktualisieren
 
 Docker → `vermieter-portal` → „Check for Updates“ → „Apply Update“. Der Datenordner bleibt erhalten.
 
-## 4. Wichtig: nur im Heimnetz
+## 5. Wichtig: nur im Heimnetz
 
 Das Portal hat keine Anmeldung. Es **nicht** im Nginx Proxy Manager freigeben und keine
 Portweiterleitung im Router einrichten. Von unterwegs nur per VPN (z. B. WireGuard in Unraid).
 
-## 5. Sichern
+## 6. Sichern
 
 Alles liegt in `/mnt/user/appdata/vermieter-portal`. Das Plugin „Appdata Backup“ sichert den Ordner mit.
