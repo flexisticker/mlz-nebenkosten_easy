@@ -39,6 +39,10 @@ Stoppen mit `docker compose down`. Die Daten bleiben dabei erhalten.
 
 Das Portal ist nur auf diesem Rechner erreichbar. Wenn du es im Heimnetz (z. B. auf einem NAS) von anderen Geräten aus öffnen willst, ändere in `docker-compose.yml` die Zeile `"127.0.0.1:8080:8080"` in `"8080:8080"`. Ins Internet sollte es nicht freigegeben werden, denn es gibt keine Anmeldung.
 
+### Unraid
+
+GitHub baut bei jeder Änderung automatisch ein fertiges Image (`ghcr.io/flexisticker/mlz-nebenkosten-easy:latest`). Für Unraid gibt es eine Vorlage, siehe [docs/INSTALLATION-UNRAID.md](docs/INSTALLATION-UNRAID.md).
+
 ### Ohne Docker
 
 Mit installiertem Node.js (ab Version 20) geht es auch direkt: `node server.js`. Die Daten landen dann ebenfalls in `daten/`.
