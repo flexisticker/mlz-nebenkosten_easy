@@ -362,11 +362,18 @@ function nkDruckHtml() {
 // ---------- Dokumente ----------
 TABS.dokumente = {
   render() {
-    const jahre = Object.keys(D.jahre).sort().reverse();
+    // Alle Jahre ab Mietbeginn (mindestens die letzten 10) bis nächstes Jahr, plus vorhandene Abrechnungsjahre.
+    const jetzt = new Date().getFullYear();
+    const seit = parseInt(String(D.mieter.seit || '').slice(0, 4)) || jetzt;
+    const vorhanden = Object.keys(D.jahre).map(Number);
+    const vonJahr = Math.min(seit, jetzt - 10, ...vorhanden);
+    const jahre = [];
+    for (let y = jetzt + 1; y >= vonJahr; y--) jahre.push(String(y));
+    const vorwahl = D.aktuell;
     return `
       <div class="card"><h2>Dokumente hochladen</h2>
         <div class="grid">
-          <div><label>Jahr</label><select id="dokJahr">${jahre.map(y => `<option>${y}</option>`).join('')}<option value="">ohne Jahr</option></select></div>
+          <div><label>Jahr</label><select id="dokJahr">${jahre.map(y => `<option ${y === vorwahl ? 'selected' : ''}>${y}</option>`).join('')}<option value="">ohne Jahr</option></select></div>
           <div><label>Art</label><select id="dokKat">${DOK_KATEGORIEN.map(k => `<option>${k}</option>`).join('')}</select></div>
         </div>
         <div class="ablage" id="ablage" style="margin-top:12px">PDFs hierher ziehen oder <button data-aktion="dokWaehlen">Dateien auswählen</button>
