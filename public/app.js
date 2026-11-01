@@ -55,12 +55,14 @@ function normalisiere(d) {
   d.miete = { kalt: 0, nk: zahl(letztesJahr.vorausMonat), kaltVor3Jahren: '', letzteErhoehung: '', ...d.miete };
   d.vertrag = {
     beginn: d.mieter.seit || '', raeume: '2 Zimmer, Küche, Bad, Flur', etage: '', keller: 'Kellerabteil', stellplatz: '',
-    gemeinschaft: 'Waschküche, Trockenraum und Garten zur Mitbenutzung', heizung: 'Zentralheizung mit Warmwasserbereitung',
+    zugehoerig: '', gemeinschaft: 'Waschküche, Trockenraum, Garten', heizung: 'Zentralheizung mit Warmwasserbereitung',
     schluessel: '2 Haus- und Wohnungsschlüssel, 1 Briefkastenschlüssel, 1 Kellerschlüssel', kaution: '', personen: '1',
-    kleinreparaturen: true, energieausweis: true, ersetzt: false, alterVertrag: '', gueltigAb: '', kautionGeleistet: true, sonstiges: '', ort: '', datum: '', ...d.vertrag,
+    kleinreparaturen: true, energieausweis: true, ersetzt: false, kalt: '', nk: '', alterVertrag: '', gueltigAb: '', kautionGeleistet: true, sonstiges: '', ort: '', datum: '', ...d.vertrag,
   };
+  if (d.vertrag.gemeinschaft === 'Waschküche, Trockenraum und Garten zur Mitbenutzung') d.vertrag.gemeinschaft = 'Waschküche, Trockenraum, Garten';
   d.brief = { art: 'miete', datum: '', neuKalt: '', kappung: 20, begruendungArt: 'vergleich', begruendung: '', neuNk: '', abNk: '', abKalt: '', betreff: '', text: '', ...d.brief };
   d.verlauf = Array.isArray(d.verlauf) ? d.verlauf : [];
+  d.geplant = Array.isArray(d.geplant) ? d.geplant : [];
   return d;
 }
 
@@ -159,6 +161,40 @@ function briefKopf(datum) {
 const absaetze = text => String(text || '').split(/\n{2,}/).map(t => `<p>${esc(t).replace(/\n/g, '<br>')}</p>`).join('');
 
 // ---------------------------------------------------------------------------
+// Geplante Mietänderungen: werden am Stichtag automatisch übernommen
+// ---------------------------------------------------------------------------
+function planeAenderung(g) {
+  // g = { ab, kalt?, nk?, text }
+  D.geplant.push({ ...g, angelegt: heute() });
+  D.geplant.sort((a, b) => a.ab.localeCompare(b.ab));
+  const sofort = !g.ab || g.ab <= heute();
+  wendeGeplantAn();
+  speichern();
+  return sofort;
+}
+
+function wendeGeplantAn() {
+  if (!D) return 0;
+  const h = heute();
+  let n = 0;
+  D.geplant = D.geplant.filter(g => {
+    if (g.ab && g.ab > h) return true;
+    if (g.kalt != null) {
+      if (rund(zahl(g.kalt)) !== rund(zahl(D.miete.kalt))) D.miete.letzteErhoehung = g.ab || h;
+      D.miete.kalt = zahl(g.kalt);
+    }
+    if (g.nk != null) D.miete.nk = zahl(g.nk);
+    if (g.seit) D.mieter.seit = g.seit;
+    D.verlauf.push({ datum: g.ab || h, art: 'miete', text: g.text });
+    n++;
+    return false;
+  });
+  return n;
+}
+
+const mieteText = (kalt, nk) => [kalt != null ? `Kaltmiete ${euro(kalt)}` : '', nk != null ? `Vorauszahlung ${euro(nk)}` : ''].filter(Boolean).join(', ');
+
+// ---------------------------------------------------------------------------
 // Reiter
 // ---------------------------------------------------------------------------
 const TABS = {};
@@ -201,6 +237,7 @@ TABS.uebersicht = {
     const hinweise = [];
     if (tageBis >= 0 && tageBis < 120) hinweise.push(`<div class="box ${tageBis < 30 ? 'warn' : 'info'}">Die Nebenkostenabrechnung ${letztes} muss bis zum <b>${datumDE(frist)}</b> bei der ${mieterBez()} sein (noch ${tageBis} Tage).</div>`);
     const naechste = naechsteErhoehungAb(heute());
+    for (const [i, g] of D.geplant.entries()) hinweise.push(`<div class="box ok">Vorgemerkt: Ab <b>${datumDE(g.ab)}</b> gilt ${esc(mieteText(g.kalt, g.nk))}. Das Programm übernimmt das an diesem Tag automatisch. <button class="danger" data-aktion="geplantLoeschen" data-i="${i}">Vormerkung löschen</button></div>`);
     hinweise.push(`<div class="box info">Eine Mieterhöhung nach § 558 BGB, die du heute verschickst, könnte frühestens ab <b>${datumDE(naechste.ab)}</b> gelten.${naechste.grund ? ' ' + naechste.grund : ''}</div>`);
     return `
       <div class="kacheln" style="margin-bottom:16px">
@@ -381,51 +418,84 @@ async function dokListe() {
 }
 
 // ---------- Mietvertrag ----------
+const vertragAb = () => { const t = D.vertrag; return t.ersetzt ? (t.gueltigAb || t.datum) : (t.beginn || D.mieter.seit); };
+
+const vertragMiete = () => {
+  const t = D.vertrag;
+  const leer = x => x === '' || x == null;
+  return { kalt: leer(t.kalt) ? zahl(D.miete.kalt) : zahl(t.kalt), nk: leer(t.nk) ? zahl(D.miete.nk) : zahl(t.nk) };
+};
+
 TABS.vertrag = {
   render() {
     const t = D.vertrag;
     return `
       <div class="card"><h2>Mietvertrag</h2>
-        <p class="hint">Namen, Adressen und Miete kommen aus den Stammdaten. Hier ergänzt du die Angaben zur Wohnung. Die Vorlage ist ein Muster ohne Gewähr und ersetzt keine Rechtsberatung. Lass sie vor der ersten Verwendung z. B. von Haus &amp; Grund prüfen.</p>
+        <p class="hint">Namen und Adressen kommen aus den Stammdaten. Die Vorlage ist ein Muster ohne Gewähr und ersetzt keine Rechtsberatung. Lass sie vor der ersten Verwendung z. B. von Haus &amp; Grund prüfen.</p>
+        <h3>Art des Vertrags</h3>
         <div class="grid">
-          ${feld('Mietbeginn', 'vertrag.beginn', { typ: 'date' })}
-          ${feld('Räume', 'vertrag.raeume')}${feld('Lage / Etage', 'vertrag.etage', { platzhalter: 'z. B. Erdgeschoss links' })}
-          ${feld('Keller / Nebenräume', 'vertrag.keller')}${feld('Stellplatz / Garage', 'vertrag.stellplatz', { platzhalter: 'leer = keiner' })}
-          ${feld('Zur Mitbenutzung', 'vertrag.gemeinschaft')}${feld('Heizung / Warmwasser', 'vertrag.heizung')}
-          ${feld('Schlüssel', 'vertrag.schluessel', { breit: true })}
-          ${feld('Kaution (€)', 'vertrag.kaution', { typ: 'geld', platzhalter: 'leer = 3 Kaltmieten', hinweis: 'Höchstens 3 Kaltmieten (§ 551 BGB).' })}
-          ${feld('Anzahl Personen', 'vertrag.personen')}
-          ${feld('Ort der Unterschrift', 'vertrag.ort', { platzhalter: ortOhnePlz(D.vermieter.ort) })}
-          ${feld('Datum der Unterschrift', 'vertrag.datum', { typ: 'date' })}
-          ${feld('Dieser Vertrag ersetzt einen bestehenden Mietvertrag', 'vertrag.ersetzt', { typ: 'bool', breit: true, hinweis: 'Für Mieter, die schon in der Wohnung wohnen. Das Mietverhältnis läuft dann ohne Unterbrechung weiter.' })}
+          ${feld('Dieser Vertrag ersetzt den bestehenden Mietvertrag', 'vertrag.ersetzt', { typ: 'bool', breit: true, hinweis: 'Ankreuzen, wenn die Mieterin oder der Mieter schon in der Wohnung wohnt. Das Mietverhältnis läuft dann ohne Unterbrechung weiter.' })}
+          ${feld(t.ersetzt ? 'Mietbeginn (ursprünglich)' : 'Mietbeginn', 'vertrag.beginn', { typ: 'date', platzhalter: '', hinweis: D.mieter.seit && !t.beginn ? 'Leer = ' + datumDE(D.mieter.seit) + ' (aus Stammdaten)' : '' })}
           ${t.ersetzt ? `
             ${feld('Datum des alten Mietvertrags', 'vertrag.alterVertrag', { typ: 'date' })}
             ${feld('Neuer Vertrag gilt ab', 'vertrag.gueltigAb', { typ: 'date', hinweis: 'Leer = ab Unterschrift.' })}
             ${feld('Kaution wurde schon gezahlt und bleibt bestehen', 'vertrag.kautionGeleistet', { typ: 'bool', breit: true })}` : ''}
+        </div>
+        <h3>Miete</h3>
+        <div class="grid">
+          ${feld('Kaltmiete pro Monat (€)', 'vertrag.kalt', { typ: 'geld', platzhalter: zahlText(D.miete.kalt), hinweis: 'Leer = aktuelle Kaltmiete aus den Stammdaten.' })}
+          ${feld('Nebenkosten-Vorauszahlung pro Monat (€)', 'vertrag.nk', { typ: 'geld', platzhalter: zahlText(D.miete.nk), hinweis: 'Leer = aktuelle Vorauszahlung aus den Stammdaten.' })}
+          ${feld('Kaution (€)', 'vertrag.kaution', { typ: 'geld', platzhalter: 'leer = 3 Kaltmieten', hinweis: 'Höchstens 3 Kaltmieten (§ 551 BGB).' })}
+          <div><label>Gesamtmiete pro Monat</label><div id="vertragSumme" style="padding:7px 0;font-weight:600"></div></div>
+        </div>
+        <div id="vertragUebernehmen"></div>
+        <h3>Wohnung</h3>
+        <div class="grid">
+          ${feld('Räume', 'vertrag.raeume')}${feld('Lage / Etage', 'vertrag.etage', { platzhalter: 'z. B. Erdgeschoss links' })}
+          ${feld('Keller / Nebenräume', 'vertrag.keller')}${feld('Stellplatz / Garage', 'vertrag.stellplatz', { platzhalter: 'leer = keiner' })}
+          ${feld('Gehört fest zur Wohnung (nur für die Mieter)', 'vertrag.zugehoerig', { platzhalter: 'z. B. Gartenanteil, Dachbodenabteil', hinweis: 'Zusätzlich zu Keller und Stellplatz. Mehrere Dinge mit Komma trennen.' })}
+          ${feld('Zur Mitbenutzung (gemeinsam mit anderen im Haus)', 'vertrag.gemeinschaft', { platzhalter: 'leer = nichts', hinweis: 'Was hier steht, nutzen alle im Haus gemeinsam. Gehört etwas nur zu deiner Wohnung, trag es oben ein.' })}
+          ${feld('Heizung / Warmwasser', 'vertrag.heizung')}
+          ${feld('Schlüssel', 'vertrag.schluessel', { breit: true })}
+          ${feld('Anzahl Personen', 'vertrag.personen')}
+        </div>
+        <h3>Weitere Regelungen und Unterschrift</h3>
+        <div class="grid">
           ${feld('Kleinreparaturklausel aufnehmen (bis 100 € je Fall, höchstens 8 % der Jahreskaltmiete)', 'vertrag.kleinreparaturen', { typ: 'bool', breit: true })}
           ${feld('Energieausweis wurde vorgelegt', 'vertrag.energieausweis', { typ: 'bool', breit: true })}
           ${feld('Sonstige Vereinbarungen', 'vertrag.sonstiges', { typ: 'textarea', breit: true })}
+          ${feld('Ort der Unterschrift', 'vertrag.ort', { platzhalter: ortOhnePlz(D.vermieter.ort) })}
+          ${feld('Datum der Unterschrift', 'vertrag.datum', { typ: 'date' })}
         </div>
         <div class="knoepfe"><button class="primary" data-aktion="vertragDruck">Mietvertrag drucken / als PDF speichern</button></div>
       </div>`;
+  },
+  update() {
+    const vm = vertragMiete(), el = $('#vertragSumme'); if (!el) return;
+    el.textContent = euro(vm.kalt + vm.nk);
+    const ab = vertragAb();
+    const vorgemerkt = D.geplant.filter(g => g.text.startsWith('Mietvertrag'));
+    $('#vertragUebernehmen').innerHTML = `<div class="box info">Wenn der Vertrag unterschrieben ist, klick hier. Das Programm übernimmt die Miete dann ${ab ? 'ab dem <b>' + datumDE(ab) + '</b>' : 'ab Vertragsbeginn'} automatisch als gültige Miete.
+      <div class="knoepfe"><button data-aktion="vertragUnterschrieben">Vertrag unterschrieben: Miete ab ${ab ? datumDE(ab) : 'Beginn'} übernehmen</button></div></div>`
+      + vorgemerkt.map(g => `<div class="box ok">Vorgemerkt: Ab ${datumDE(g.ab)} gilt ${esc(mieteText(g.kalt, g.nk))}.</div>`).join('');
   },
 };
 
 function vertragHtml() {
   const v = D.vermieter, m = D.mieter, t = D.vertrag, mi = D.miete;
-  const kalt = zahl(mi.kalt), nk = zahl(mi.nk);
+  const { kalt, nk } = vertragMiete();
   const kaution = t.kaution === '' || t.kaution == null ? kalt * 3 : zahl(t.kaution);
   let n = 0;
   const par = (titel, inhalt) => `<div class="keinumbruch"><h4>§ ${++n} ${titel}</h4>${inhalt}</div>`;
-  const mitvermietet = [t.keller, t.stellplatz].filter(Boolean).join(', ');
+  const mitvermietet = [t.keller, t.stellplatz, t.zugehoerig].filter(Boolean).join(', ');
   return `<div class="vertrag">
     <div class="titelblatt">Mietvertrag über Wohnraum</div>
     <p>Zwischen<br><b>${esc(v.name)}</b>, ${esc(v.strasse)}, ${esc(v.ort)}<br>– nachfolgend „Vermieter“ –</p>
     <p>und<br><b>${esc(m.name)}</b><br>– nachfolgend „Mieter“ –</p>
     <p>wird folgender Mietvertrag geschlossen:</p>
     ${par('Mietsache', `<p>(1) Vermietet wird zu Wohnzwecken die Wohnung (${esc(m.wohnung)}${t.etage ? ', ' + esc(t.etage) : ''}) im Haus ${esc(m.strasse)}, ${esc(m.ort)}, bestehend aus ${esc(t.raeume)}. Die Wohnfläche beträgt ca. ${esc(m.flaeche)} m².</p>
-      ${mitvermietet ? `<p>(2) Mitvermietet sind: ${esc(mitvermietet)}.</p>` : ''}
-      ${t.gemeinschaft ? `<p>(${mitvermietet ? 3 : 2}) ${esc(t.gemeinschaft)}.</p>` : ''}
+      ${mitvermietet ? `<p>(2) Zur Wohnung gehören und werden allein vom Mieter genutzt: ${esc(mitvermietet)}.</p>` : ''}
+      ${t.gemeinschaft ? `<p>(${mitvermietet ? 3 : 2}) Gemeinsam mit den anderen Hausbewohnern darf der Mieter mitbenutzen: ${esc(t.gemeinschaft)}.</p>` : ''}
       <p>Die Wohnung gehört zu einer Wohnungseigentumsanlage. Die Hausordnung und die Beschlüsse der Eigentümergemeinschaft zum Gebrauch des gemeinschaftlichen Eigentums sind auch für den Mieter verbindlich, soweit sie ihm bekannt gegeben wurden.</p>
       <p>Die Wohnung wird von ${esc(t.personen || '1')} Person(en) bewohnt.</p>`)}
     ${par('Mietzeit und Kündigung', `${t.ersetzt
@@ -721,6 +791,15 @@ const AKTIONEN = {
     const titel = prompt('Neuer Titel:', el.dataset.titel); if (!titel) return;
     await fetch('/api/dokumente/' + el.dataset.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ titel }) }); dokListe();
   },
+  vertragUnterschrieben() {
+    const vm = vertragMiete(), t = D.vertrag;
+    const ab = vertragAb();
+    if (!ab) return alert(t.ersetzt ? 'Bitte „Neuer Vertrag gilt ab“ oder das Datum der Unterschrift eintragen.' : 'Bitte den Mietbeginn eintragen.');
+    if (!confirm(`Ist der Vertrag unterschrieben? Dann gilt ab ${datumDE(ab)}: Kaltmiete ${euro(vm.kalt)}, Vorauszahlung ${euro(vm.nk)}. Das Programm übernimmt das an diesem Tag automatisch.`)) return;
+    const sofort = planeAenderung({ ab, kalt: vm.kalt, nk: vm.nk, seit: t.ersetzt ? null : ab, text: `Mietvertrag${t.ersetzt ? ' (ersetzt bisherigen Vertrag)' : ''}: ${mieteText(vm.kalt, vm.nk)}` });
+    t.kalt = ''; t.nk = '';
+    speichern(); zeige('vertrag'); status(sofort ? 'Miete übernommen' : `Vorgemerkt ab ${datumDE(ab)}`);
+  },
   vertragDruck() { drucken(vertragHtml(), `Mietvertrag ${D.mieter.name}`); },
   briefDruck() { const bd = briefDaten(); drucken(briefDruckHtml(), `${bd.betreff} ${D.mieter.name}`); },
   briefMail() {
@@ -735,19 +814,22 @@ const AKTIONEN = {
   },
   mieteUebernehmen() {
     const bd = briefDaten();
-    if (!confirm(`Hat die ${mieterBez()} zugestimmt? Dann wird die Kaltmiete ab ${datumDE(bd.ab)} auf ${euro(bd.neu)} gesetzt${bd.nkAnders ? ` und die Vorauszahlung auf ${euro(bd.neuNk)}` : ''}.`)) return;
-    D.verlauf.push({ datum: heute(), art: 'kaltmiete', ab: bd.ab, alt: bd.alt, neu: bd.neu, text: `Kaltmiete ab ${datumDE(bd.ab)}: ${euro(bd.alt)} → ${euro(bd.neu)}` });
-    if (bd.nkAnders) D.verlauf.push({ datum: heute(), art: 'vorauszahlung', ab: bd.ab, alt: bd.altNk, neu: bd.neuNk, text: `Nebenkosten-Vorauszahlung ab ${datumDE(bd.ab)}: ${euro(bd.altNk)} → ${euro(bd.neuNk)}` });
-    D.miete.kalt = bd.neu; D.miete.letzteErhoehung = bd.ab; if (bd.nkAnders) D.miete.nk = bd.neuNk;
+    if (!confirm(`Hat die ${mieterBez()} zugestimmt? Dann gilt ab ${datumDE(bd.ab)} die Kaltmiete ${euro(bd.neu)}${bd.nkAnders ? ` und die Vorauszahlung ${euro(bd.neuNk)}` : ''}. Das Programm übernimmt das an diesem Tag automatisch.`)) return;
+    const sofort = planeAenderung({ ab: bd.ab, kalt: bd.neu, nk: bd.nkAnders ? bd.neuNk : null, text: `Mieterhöhung: ${mieteText(bd.neu, bd.nkAnders ? bd.neuNk : null)} (vorher ${euro(bd.alt)} kalt)` });
     D.brief.neuKalt = ''; D.brief.abKalt = ''; D.brief.neuNk = '';
-    speichern(); zeige('schreiben'); status('Neue Miete übernommen');
+    speichern(); zeige('schreiben'); status(sofort ? 'Neue Miete übernommen' : `Vorgemerkt ab ${datumDE(bd.ab)}`);
   },
   nkUebernehmen() {
     const bd = briefDaten();
-    if (!confirm(`Vorauszahlung ab ${datumDE(bd.ab)} auf ${euro(bd.neuNk)} setzen?`)) return;
-    D.verlauf.push({ datum: heute(), art: 'vorauszahlung', ab: bd.ab, alt: bd.altNk, neu: bd.neuNk, text: `Nebenkosten-Vorauszahlung ab ${datumDE(bd.ab)}: ${euro(bd.altNk)} → ${euro(bd.neuNk)}` });
-    D.miete.nk = bd.neuNk; D.brief.neuNk = ''; D.brief.abNk = '';
-    speichern(); zeige('schreiben'); status('Neue Vorauszahlung übernommen');
+    if (!confirm(`Vorauszahlung ab ${datumDE(bd.ab)} auf ${euro(bd.neuNk)} setzen? Das Programm übernimmt das an diesem Tag automatisch.`)) return;
+    const sofort = planeAenderung({ ab: bd.ab, nk: bd.neuNk, text: `Neue Nebenkosten-Vorauszahlung: ${euro(bd.neuNk)} (vorher ${euro(bd.altNk)})` });
+    D.brief.neuNk = ''; D.brief.abNk = '';
+    speichern(); zeige('schreiben'); status(sofort ? 'Neue Vorauszahlung übernommen' : `Vorgemerkt ab ${datumDE(bd.ab)}`);
+  },
+  geplantLoeschen(el) {
+    const g = D.geplant[+el.dataset.i];
+    if (!g || !confirm(`Vormerkung ab ${datumDE(g.ab)} (${mieteText(g.kalt, g.nk)}) löschen?`)) return;
+    D.geplant.splice(+el.dataset.i, 1); speichern(); zeige(tab);
   },
 };
 
@@ -778,7 +860,13 @@ $('#jsonDatei').addEventListener('change', async e => {
 // Start
 // ---------------------------------------------------------------------------
 (async () => {
-  try { D = await laden(); status(D ? 'Daten geladen' : ''); }
+  try {
+    D = await laden();
+    status(D ? 'Daten geladen' : '');
+    if (D && wendeGeplantAn()) { await speichern(true); status('Vorgemerkte Mietänderung übernommen'); }
+  }
   catch { status('Server nicht erreichbar', true); $('#inhalt').innerHTML = '<div class="card">Der Server antwortet nicht. Läuft der Docker-Container?</div>'; return; }
   zeige(location.hash.slice(1) || 'uebersicht');
+  // Läuft das Portal über Nacht, Vormerkungen trotzdem rechtzeitig übernehmen.
+  setInterval(() => { if (D && wendeGeplantAn()) { speichern(); zeige(tab); } }, 60 * 60 * 1000);
 })();
